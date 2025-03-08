@@ -1,0 +1,179 @@
+function onFormSubmit(e) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  addExtraColumns();
+  const row = e.range.getRow();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; // Get the header row
+  
+  // Create a map of column names to their indices
+  const columnMap = {};
+  headers.forEach((header, index) => {
+    columnMap[header.trim()] = index;
+  });
+  
+  const timestamp = e.values[columnMap["Timestamp"]];
+  const email = e.values[columnMap["Email"]] ? e.values[columnMap["Email"]].trim() : "";
+  
+  const submittedDate = new Date(timestamp);
+  const submittedDay   = submittedDate.getDate();
+  const submittedMonth = submittedDate.getMonth();
+  const submittedYear  = submittedDate.getFullYear();
+  const formattedDate = `${submittedYear}-${submittedMonth}-${submittedDay}`;
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const rowTimestamp = data[i][columnMap["Timestamp"]];
+    const rowEmail = data[i][columnMap["Email"]];
+
+    const rowDate = new Date(rowTimestamp);
+    const rowDay   = rowDate.getDate();
+    const rowMonth = rowDate.getMonth();
+    const rowYear  = rowDate.getFullYear();
+
+    if (
+      rowDay === submittedDay &&
+      rowMonth === submittedMonth &&
+      rowYear === submittedYear &&
+      rowEmail === email &&
+      i !== (row - 1)
+    ) {
+      // Send an email letting them know they already submitted today
+      MailApp.sendEmail({
+        to: email,
+        subject: "Duplicate Submission for Today 🚫",
+        htmlBody: `
+          <p>Hi there,</p>
+          <p>⚠️ Our records show that you have already submitted today.</p>
+          <p>Each day is limited to one submission. Please try again tomorrow.</p>
+          <p>Thank you for your interest! 🙌</p>
+        `
+      });      
+      return;
+    }
+  }
+  
+  const randomString = Math.random().toString(36).substring(2, 10);
+  const uniqueCode = `${email}_${submittedDay}-${submittedMonth+1}-${submittedYear}_${randomString}`;
+
+  const deplymentID = 'AKfycbyYfIEPB2vtHQ8rbAqR5b7xTkvANgTQmOAVVkKcRJ0L19tSHoee4Q2-WYMyHyeGCGS75g';
+  const ticketPageUrl = `https://script.google.com/macros/s/${deplymentID}/exec?code=${encodeURIComponent(uniqueCode)}&date=${encodeURIComponent(submittedDate.toISOString())}`;
+  const qrUrl = `https://quickchart.io/qr?format=png&margin=1&size=300&text=${encodeURIComponent(ticketPageUrl)}`;
+
+  // Save the ticket details in the Sheet
+  sheet.getRange(row, columnMap["Ticket Code"] + 1).setValue(uniqueCode);
+  sheet.getRange(row, columnMap["Status"] + 1).setValue("Valid"); // Default status as "Valid"
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "Your One-Time Use QR Code",
+    htmlBody: `
+      <p>Hi there,</p>
+      <p>✅ Your ticket for <strong>${formattedDate}</strong> has been successfully generated!</p>
+      <p>Please present this QR code at the entrance:</p>
+      <img src="${qrUrl}" alt="Your QR Code" />
+      <hr>
+      <p>🎟️ <strong>Ticket Details:</strong></p>
+      <ul>
+        <li>📧 <strong>Email:</strong> ${email}</li>
+        <li>📅 <strong>Date:</strong> ${formattedDate}</li>
+        <li>🎉 <strong>Event:</strong> MSA Iftar</li>
+        <li>ℹ️ <strong>Instructions:</strong> Show this QR code at the entrance.</li>
+      </ul>
+      <p>We look forward to seeing you! 🎊</p>
+    `
+  });
+}
+
+function doGet(e) {  
+  // Extract ticket text from the URL
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const code = e.parameter.code;
+  if (!code) {
+    return HtmlService.createHtmlOutput("❌ Invalid or missing ticket code.");
+  }
+
+  const submittedDate = new Date(e.parameter.date);
+  const submittedDay   = submittedDate.getDate();
+  const submittedMonth = submittedDate.getMonth();
+  const submittedYear  = submittedDate.getFullYear();
+
+  const currentDate = new Date();
+  const currentDay   = currentDate.getDate();
+  const currentMonth = currentDate.getMonth();
+  const currentYear  = currentDate.getFullYear();
+
+  const data = sheet.getDataRange().getValues();
+  let columnMap = {};
+  const headers = data[0]; // Get header row
+  headers.forEach((header, index) => {
+    columnMap[header.trim()] = index;
+  });
+
+  let ticketRow = -1;
+  let ticketStatus = true; // Default status is Valid
+
+  // Search for the ticket in the sheet
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][columnMap["Ticket Code"]].trim() === code.trim()) {
+      ticketRow = i;
+      email = data[i][columnMap["Email"]];
+      if (data[i][columnMap["Status"]].trim() === "Used") {
+        ticketStatus = false;
+      }
+      break;
+    }
+  }
+
+  if (ticketRow === -1) {
+    return HtmlService.createHtmlOutput("❌ Ticket not found.");
+  }
+
+  // If the ticket is still valid, mark it as used
+  if (data[ticketRow][columnMap["Status"]].trim() === "Valid") {
+    sheet.getRange(ticketRow + 1, columnMap["Status"] + 1).setValue("Used");
+    ticketStatus = true;
+  }
+
+  const validTicket = currentDay === submittedDay 
+                      && currentMonth === submittedMonth 
+                      && currentYear === submittedYear 
+                      && ticketStatus;
+
+  const validTicketText = validTicket ? 
+  ` ✅ Ticket is Valid for ${submittedDay}-${submittedMonth}-${submittedYear}` : 
+  `🚫 Ticket is not Valid for ${submittedDay}-${submittedMonth}-${submittedYear}`;
+
+  // Build the Ticket HTML
+  const ticketHtml = `
+    <style>
+      body { font-family: Arial, sans-serif; text-align: center; }
+      .ticket { padding: 20px; border: 2px solid #000; display: inline-block; margin-top: 50px; }
+    </style>
+    <div class="ticket">
+      <h1>🎟️ IFTAR TICKET 🎟️</h1>
+      <h2>📧 Ticket Status: ${validTicketText}</h2>
+      <h3>Unique Code: ${code}</h3>
+    </div>
+  `;
+
+  // Return the HTML page
+  return HtmlService.createHtmlOutput(ticketHtml).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function addExtraColumns() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  const requiredColumns = ["Ticket Code", "Status"];
+  let addedColumns = 0;
+
+  requiredColumns.forEach(colName => {
+    if (!headers.includes(colName)) {
+      sheet.getRange(1, headers.length + 1 + addedColumns).setValue(colName);
+      addedColumns++;
+    }
+  });
+
+  if (addedColumns > 0) {
+    SpreadsheetApp.flush(); // Apply changes
+  }
+}
