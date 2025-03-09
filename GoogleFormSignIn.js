@@ -1,6 +1,6 @@
 // MODIFY THIS WHEN MODIFYING THIS AND REPLOYING
 const DEPLOYMENT_ID = 'AKfycbxnAudIEHBRk92m3vIq-GQdXrLpB2bzThSFp5YzOvwDQQV_DA0Cp32PWCTcKqKigAirag';
-const TIMESTAMP = "Timestamp", EMAIL = "Email",
+const TIMESTAMP = "Timestamp", EMAIL = "UWaterloo Email",
       TICKET_CODE = "Ticket Code", STATUS = "Status",
       VALID = "Valid", USED = "Used";
 
